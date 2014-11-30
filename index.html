@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Home</title>
+
+    <link href="assets/css/bootstrap.min.css" rel="stylesheet" />
+    <link href="assets/css/jquery-ui-1.10.0.custom.css" rel="stylesheet" />
+    <link href="assets/css/custom.css" rel="stylesheet" />
+
+    <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
+    <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+    <!--[if lt IE 9]>
+      <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
+      <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
+    <![endif]-->
+  </head>
+  <body>
+    <nav class="navbar navbar-inverse" role="navigation">
+      <div class="container-fluid">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="#">
+            MPB
+          </a>
+        </div>
+          <button type="button" class="btn btn-default navbar-btn pull-right">Log out</button>
+      </div>
+    </nav>
+
+    <div class="container-fluid">
+      <div class="page-header">
+        <h1>Sistem Manajemen Logistik</h1>
+      </div>
+      <hr style='border-bottom: 3px solid #ccc;'></hr>
+      <div class="row" style="margin: 2em;">
+        <div id="map-canvas" class="col-md-9 mapboard img-rounded img-responsive map"></div>
+
+        <div class="col-md-3"> <!-- sidebar kebutuhan logistik -->
+          <h3>Daftar Logistik</h3><hr style='border-bottom: 1px solid #ccc;'></hr>
+          <ul class="list-group" id="daftar-logistik">
+          </ul>
+        </div><!-- /sidebar kebutuhan logistik -->
+
+      </div>
+    </div>
+
+    <div class="modal fade" id="ubahLogistik" tabindex="-1" role="dialog" aria-labelledby="ubahLogistikLabel" aria-hidden="true">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <button type="button" class="close" data-dismiss="modal"><span aria-hidden="true">&times;</span><span class="sr-only">Tutup</span></button>
+            <h4 class="modal-title" id="ubahLogistikLabel">Ubah Alokasi Logistik</h4>
+          </div>
+          <div class="modal-body" id="ubahLogistikBody">
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-default" data-dismiss="modal">Tutup</button>
+            <button type="button" id='btn-submit' data-dismiss="modal" class="btn btn-primary">Simpan Perubahan</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- jQuery (necessary for Bootstrap's JavaScript plugins) -->
+    <script src="assets/js/jquery.min.js"></script>
+    <!-- modified jQueryUI -->
+    <script src="assets/js/jquery-ui-1.10.0.custom.min.js"></script>
+    <!-- Include all compiled plugins (below), or include individual files as needed -->
+    <script src="assets/js/bootstrap.min.js"></script>
+    <!-- Google Maps API -->
+    <script type="text/javascript" 
+      src="https://maps.googleapis.com/maps/api/js?sensor=false">
+    </script>
+    <script type="text/javascript">
+    // lokasi bencana
+    var counter = 0;
+    var listLokasiBencana = {};
+    listLokasiBencana['ITB'] = {
+      id: 'ITB',
+      nama: 'Kebakaran di ITB',
+      lokasi: {lat: -6.8899, lng: 107.6100},
+      radius: 70,
+      deskripsi: 'Kebakaran di Labtek V',
+      korban: {
+        meninggal : 10,
+        luka : 100
+      }
+      
+    }
+    
+    listLokasiBencana['Hegarmanah'] = {
+      id: 'Hegarmanah',
+      nama: 'Tanah Longsor di Hegarmanah',
+      lokasi: {lat: -6.874167, lng: 107.602222},
+      radius: 1000,
+      deskripsi: 'Tanah longsor, banyak rumah tertimbun di Kelurahan Hegarmanah',
+      korban: {
+        meninggal: 50,
+        luka: 230,
+        mengungsi: 1000
+      },
+      bantuan: {
+        'AirBersih': {
+          id: 'AirBersih',
+          nama: 'Air Bersih',
+          deskripsi: 'Air Bersih dalam galon',
+          satuan: 'galon (12 liter)',
+          jumlah: 10
+        }
+      }
+    };
+
+    // bantuan
+    var listBantuan = {};
+    listBantuan['AirBersih'] = {
+      id: 'AirBersih',
+      nama: 'Air Bersih',
+      deskripsi: 'Air Bersih dalam galon',
+      satuan: 'galon (12 liter)',
+      jumlah: 25
+    }
+
+    listBantuan['PaketObat'] = {
+      id: 'PaketObat',
+      nama: 'Paket Obat',
+      deskripsi: 'Paket P3K beserta obat-obatan generik untuk diare, demam, dan sakit kepala',
+      satuan: 'paket',
+      jumlah: 50
+    }
+
+    listBantuan['Selimut'] = {
+      id: 'Selimut',
+      nama: 'Selimut',
+      deskripsi: 'Selimut hangat',
+      satuan: 'kodi (20 pcs)',
+      jumlah: 30
+    }
+
+    // some 'global' variables
+    var map; // the map
+    var lastWindow; // for InfoWindow
+    var modalTriggerId;
+    var overlay;
+
+    var circleMap = {};
+
+    function initialize() {
+      var mapOptions = {
+        center : {lat: -6.914744, lng: 107.609810},
+        zoom : 13
+      };
+
+      map = new google.maps.Map(document.getElementById('map-canvas'), 
+          mapOptions);
+
+      for (var lokasi in listLokasiBencana) {
+        createMarker(listLokasiBencana[lokasi]);
+      }
+
+      overlay = new google.maps.OverlayView();
+      overlay.draw = function() {};
+      overlay.setMap(map);
+    }
+
+    function createMarker(lokasiBencana) {
+      // get the location
+      var coordinate = new google.maps.LatLng(lokasiBencana.lokasi.lat, lokasiBencana.lokasi.lng);
+
+      // mp options
+      var circleOptions = {
+        clickable: true,
+        strokeColor: '#FF0000',
+        strokeOpacity: 0.8,
+        strokeWeight: 2,
+        fillColor: '#FF0000',
+        fillOpacity: 0.5,
+        map: map,
+        center: coordinate,
+        radius: lokasiBencana.radius,
+        id: lokasiBencana.id
+      }
+
+      // create the icon
+      var circle = new google.maps.Circle(circleOptions);
+
+      // the listeners
+      google.maps.event.addListener(circle, 'click', function(event) {
+        if(typeof(lastWindow) === 'undefined') {
+          lastWindow = new google.maps.InfoWindow();
+        } else {
+          lastWindow.close();
+        }
+
+        // set the position and contents of the info window
+        lastWindow.setPosition(circle.getCenter());
+        lastWindow.setContent(generateInfoWindowContent(lokasiBencana));
+        lastWindow.open(map);
+      });
+
+      google.maps.event.addListener(circle, 'mouseover', function(event) {
+        // lower the opacity
+        var fillOpacity = circle.get("fillOpacity");
+        fillOpacity -= 0.2;
+        if(fillOpacity < 0) {
+          fillOpacity = 0;
+        }
+
+        circle.setOptions({fillOpacity: fillOpacity});
+      });
+
+      google.maps.event.addListener(circle, 'mouseout', function(event) {
+        // increase the opacity
+        var fillOpacity = circle.get("fillOpacity");
+        fillOpacity += 0.2;
+        if(fillOpacity > 1) {
+          fillOpacity = 1;
+        }
+
+        circle.setOptions({fillOpacity: fillOpacity});
+      });
+
+      circleMap[lokasiBencana.id] = circle;
+    }
+
+    function isInCircle(lokasiBencanaId, point) {
+      var ret;
+
+      if (circleMap[lokasiBencanaId] !== undefined) {
+
+      } else {
+        ret = false;
+      }
+
+      return ret;
+    }
+
+    function generateInfoWindowContent(lokasiBencana) {
+      var content = "<div class='panel panel-default'>" +
+                    "<h4 class='panel-heading'>" + lokasiBencana.nama + "</h4>" +
+                    "<div class='panel-body'><p>" + lokasiBencana.deskripsi + "</p></div>" +
+                    "<h5 class='panel-heading'>Daftar Bantuan" +
+                    "<span class='glyphicon glyphicon-pencil pull-right' onClick='showModal(\"" + lokasiBencana.id + "\")'></span>" +
+                    "</h5>" +
+                    "<ul class='list-group' id='lokasi-" + lokasiBencana.id + "'>";
+      
+      if(jQuery.isEmptyObject(lokasiBencana.bantuan)) {
+        content +=  "<li class='list-group-item'>" +
+                    "<strong>Tidak ada bantuan yang dialokasi</strong>" +
+                    "</li>"
+      } else {
+        for(var item in lokasiBencana.bantuan) {
+          content += displayBantuan(lokasiBencana.bantuan[item]);
+        }
+      }
+
+      content +=    "</ul>" +
+                    "</div>"
+      return content;
+    }
+
+    function clone(obj) {
+        var copy;
+
+        // Handle the 3 simple types, and null or undefined
+        if (null == obj || "object" != typeof obj) return obj;
+
+        // Handle Date
+        if (obj instanceof Date) {
+            copy = new Date();
+            copy.setTime(obj.getTime());
+            return copy;
+        }
+
+        // Handle Array
+        if (obj instanceof Array) {
+            copy = [];
+            for (var i = 0, len = obj.length; i < len; i++) {
+                copy[i] = clone(obj[i]);
+            }
+            return copy;
+        }
+
+        // Handle Object
+        if (obj instanceof Object) {
+            copy = {};
+            for (var attr in obj) {
+                if (obj.hasOwnProperty(attr)) copy[attr] = clone(obj[attr]);
+            }
+            return copy;
+        }
+
+        throw new Error("Unable to copy obj! Its type isn't supported.");
+    }
+
+    function displayBantuan(bantuan) {
+      var contentBantuan =  "<li class='list-group-item' draggable='true' id='bantuan-" + bantuan.id + "'>" +
+                            "<strong>" + bantuan.nama + "</strong>" +
+                            "<span class='badge'>" + bantuan.jumlah + " - " +  bantuan.satuan +"</span>" +
+                            "</li>";
+      return contentBantuan;
+    }
+
+    google.maps.event.addDomListener(window, 'load', initialize);
+    </script>
+
+    <script type="text/javascript">
+    function displayLogistik(bantuan) {
+      var content = "<li class='list-group-item draggable' id='" + bantuan.id + "'>" +
+                    "<span class='badge'>" + bantuan.jumlah + " - " + bantuan.satuan + "</span>" +
+                    "<h4 class='list-group-item-heading'><strong>" + bantuan.nama + "</strong></h4>" +
+                    "<p class='list-group-item-text'>" + bantuan.deskripsi + "</p>" +
+                    "</li>";
+
+      $('#daftar-logistik').append(content);
+    }
+
+    function refreshBantuan() {
+      $('#daftar-logistik').empty();
+
+      for (var bantuan in listBantuan) {
+        displayLogistik(listBantuan[bantuan]);
+      }
+
+      $('.draggable').draggable({
+        helper: "clone",
+        stop: function(event, ui) {
+          var point = new google.maps.Point(event.pageX, event.pageY);
+          var latLng = overlay.getProjection().fromContainerPixelToLatLng(point);
+
+          for(var marker in circleMap) {
+            var dist = getDistanceFromLatLon(circleMap[marker].getCenter(), latLng)
+            console.log(marker + ': ' + dist);
+
+            if(dist < (circleMap[marker].getRadius() + 200)) {
+              tambahBantuan(this.id, marker, 1);
+            }
+          }
+        }
+      })
+    }
+
+    function tambahBantuan(bantuanId, lokasiId, jumlah) {
+      if(jumlah > 0) {
+        if(listBantuan[bantuanId].jumlah >= jumlah) {
+          if(!listLokasiBencana[lokasiId].hasOwnProperty('bantuan')) {
+            listLokasiBencana[lokasiId].bantuan = {};
+          }
+
+          if(jQuery.isEmptyObject(listLokasiBencana[lokasiId].bantuan[bantuanId])) { // clone
+            listLokasiBencana[lokasiId].bantuan[bantuanId] = clone(listBantuan[bantuanId]);
+            listLokasiBencana[lokasiId].bantuan[bantuanId].jumlah = jumlah;
+          } else {
+            listLokasiBencana[lokasiId].bantuan[bantuanId].jumlah += jumlah;
+          }
+
+          listBantuan[bantuanId].jumlah -= jumlah;
+        }
+      } else if (jumlah < 0) { 
+        jumlah = Math.abs(jumlah);
+        if(typeof(listLokasiBencana[lokasiId].bantuan[bantuanId]) !== 'undefined') {
+          if(listLokasiBencana[lokasiId].bantuan[bantuanId].jumlah >= jumlah) {
+            
+            // asumsi: barangnya uda ada di daftar logistik
+            listLokasiBencana[lokasiId].bantuan[bantuanId].jumlah -= jumlah;
+            if(listLokasiBencana[lokasiId].bantuan[bantuanId].jumlah == 0) {
+              delete listLokasiBencana[lokasiId].bantuan[bantuanId];
+            }
+
+            listBantuan[bantuanId].jumlah += jumlah;
+          }
+        }
+      } // kalo 0 ngga ngapa-ngapain
+
+      refreshBantuan();
+    }
+
+    // document.onReady
+    $(document).ready(function() {
+      refreshBantuan();
+
+      $('#ubahLogistik').on('show.bs.modal', function() {
+        $('#ubahLogistikBody').empty();
+        $('#ubahLogistikBody').append('<h4>Ubah Bantuan untuk ' + listLokasiBencana[modalTriggerId].nama + '</h4>');
+
+        $('#btn-submit').attr('onclick', 'updateChanges(\"'+ listLokasiBencana[modalTriggerId].id +'\")');
+        addFormToModal();
+      }); // end of show.bs.modal
+
+      function addFormToModal() {
+        // generate the list
+        $ul = $('<ul/>').attr('id', 'daftarBantuan').addClass('dropdown-menu');
+        $.each(listBantuan, function(i) {
+          var li = $('<li/>')
+              .appendTo($ul);
+          var aaa = $('<a/>')
+              .attr('href', '#')
+              .attr('data-id', listBantuan[i].id)
+              .text(listBantuan[i].nama)
+              .appendTo(li);
+        })
+
+        $div = $('<div/>')
+                  .addClass('form-group form-inline')
+                  .append($('<div/>')
+                    .addClass('pull-left btn-group')
+                    .append($('<a/>')
+                      .addClass('btn')
+                      .addClass('btn-default')
+                      .addClass('dropdown-toggle')
+                      .addClass('btn-select')
+                      .attr('data-toggle', 'dropdown')
+                      .attr('href', '#')
+                      .text('Pilih Bantuan ')
+                      .append($('<span/>').addClass('caret'))
+                      )
+                    .append($ul)
+                  )
+                  .append($('<input/>')
+                      .attr('type', 'number')
+                      .attr('id', 'id-input' + counter)
+                      .addClass('form-control')
+                      .addClass('col-md-3')
+                      .hide()
+                      )
+                    .append($('<span/>')
+                      .addClass('glyphicon glyphicon-remove pull-right')
+                      .click(function() {
+                        alert('Not Yet Implemented');
+                      }));
+
+        // generate the form
+        if(counter == 0) {
+          $form = $('<form/>').attr('role', 'form').attr('id', 'form-modal').addClass('form-horizontal')
+          $form.append($div)
+
+          $('#ubahLogistikBody').append($form);
+        } else {
+          $('#form-modal').append($div);
+        }
+        counter++;
+
+        $(".dropdown-menu li a").click(function(){
+          var selText = $(this).text();
+          $(this).parents('.btn-group').find('.dropdown-toggle').html(selText + ' <span class="caret"></span>');
+          $(this).parents('.form-group').find('.form-control').show()
+          $(this).parents('.form-group').find('input').attr('id', getBantuanId(selText));
+
+          if(counter < Object.keys(listBantuan).length) {
+            addFormToModal();
+          }
+        });
+      }
+
+      $('#ubahLogistik').on('hide.bs.modal', function() {
+        counter = 0;
+      });
+    })
+
+    function updateChanges(lokasiId) {
+      for(bantuan in listBantuan) {
+        var val = '#' + bantuan;
+        if($(val).length > 0) {
+          tambahBantuan(bantuan, lokasiId, parseInt($(val).val()));
+        }
+      }
+      $('#ubahLogistik').modal('hide');
+    }
+
+    function showModal(id) {
+      modalTriggerId = id;
+      $('#ubahLogistik').modal("show");
+    }
+
+    function getBantuanId(name) {
+      for(namaBantuan in listBantuan) {
+        if(listBantuan[namaBantuan].nama === name)
+          return listBantuan[namaBantuan].id;
+      }
+
+      return false;
+    }
+
+    function getDistanceFromLatLon(point1, point2) {
+      var R = 6378131; // Radius of the earth in meters
+      var dLat = deg2rad(point2.lat() - point1.lat());  // deg2rad below
+      var dLon = deg2rad(point2.lng() - point1.lng()); 
+      var a = 
+        Math.sin(dLat/2) * Math.sin(dLat/2) +
+        Math.cos(deg2rad(point1.lat())) * Math.cos(deg2rad(point2.lat())) * 
+        Math.sin(dLon/2) * Math.sin(dLon/2)
+        ;
+      var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
+      var d = R * c; // Distance in km
+      return d; // Distance in meters
+    }
+
+    function deg2rad(deg) {
+      return deg * (Math.PI/180)
+    }
+    // drag-and-drop handler
+    
+
+    </script>
+  </body>
+</html>
